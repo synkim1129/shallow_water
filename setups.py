@@ -71,13 +71,6 @@ class WaterSurfaceDataset:
         h_delta = torch.zeros(1, self.height, self.width)
         u = torch.zeros(1, self.height, self.width)
         v = torch.zeros(1, self.height, self.width)
-        
-        c = torch.sqrt(self.g * self.H0)  # characteristic wave speed
-        
-        # Random velocity component base strength (as fraction of wave speed)
-        velocity_strength = 0.1  # 10% of wave speed
-        base_random_u = torch.tensor(np.random.uniform(-1, 1, u.shape)) * velocity_strength * c
-        base_random_v = torch.tensor(np.random.uniform(-1, 1, v.shape)) * velocity_strength * c
 
         pattern = np.random.choice([
             "standing_waves",
@@ -94,9 +87,6 @@ class WaterSurfaceDataset:
             x = torch.arange(self.width)
             Y, X = torch.meshgrid(y, x, indexing='ij')
             h_delta = A * torch.sin(kx*X) * torch.sin(ky*Y)
-            
-            u = A * c * kx * torch.cos(kx*X) * torch.sin(ky*Y) + base_random_u
-            v = A * c * ky * torch.sin(kx*X) * torch.cos(ky*Y) + base_random_v
             
             self.env_info[index].update({
                 "type": pattern,
@@ -119,17 +109,7 @@ class WaterSurfaceDataset:
                 Y, X = torch.meshgrid(y, x, indexing='ij')
                 h_delta += A * torch.exp(-((X-x0)**2 + (Y-y0)**2)/(2*sigma**2))
                 
-                # Add radial velocity for each peak
-                r = torch.sqrt((X - x0)**2 + (Y - y0)**2)
-                r = torch.clamp(r, min=1.0)  # Prevent division by zero
-                v_r = A * c * torch.exp(-r**2/(2*sigma**2))
-                u += v_r * (X - x0) / r
-                v += v_r * (Y - y0) / r
-                
                 peaks_info.append({"x0": x0, "y0": y0, "sigma": sigma, "A": A})
-                
-            u += base_random_u
-            v += base_random_v
             
             self.env_info[index].update({
                 "type": pattern,
@@ -147,9 +127,10 @@ class WaterSurfaceDataset:
             phase = k * (X*torch.cos(theta) + Y*torch.sin(theta))
             h_delta += A * torch.sin(phase)
             
-            # Set velocity for wave propagation
-            u = A * c * k * torch.cos(theta) * torch.cos(phase) + base_random_u
-            v = A * c * k * torch.sin(theta) * torch.cos(phase) + base_random_v
+            # Set initial velocities for wave propagation
+            c = torch.sqrt(self.g * self.H0)  # wave speed
+            u += A * c * k * torch.cos(theta) * torch.cos(phase)
+            v += A * c * k * torch.sin(theta) * torch.cos(phase)
             
             self.env_info[index].update({
                 "type": pattern,
